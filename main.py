@@ -11,6 +11,7 @@ from sds011 import SDS011Sensor
 from sim7600 import SIM7600
 from wifi_manager import WiFiManager
 from speed_test import SpeedTest
+from ota_updater import OTAUpdater
 
 
 def main():
@@ -20,9 +21,23 @@ def main():
     sim = SIM7600()
     wifi = WiFiManager()
     speed_test = SpeedTest()
+    ota_updater = OTAUpdater()
 
     print("Устройство:", config.DEVICE_NAME)
     print("Стартиране на станцията...")
+    
+    # Изпълняване на тестове при стартиране (ако е конфигурирано)
+    if config.TEST_ENABLED and config.TEST_RUN_ON_STARTUP:
+        print("Изпълняване на тестове...")
+        try:
+            sys.path.append("tests")
+            from run_all_tests import main as run_tests
+            tests_success = run_tests()
+            if not tests_success:
+                print("ВНИМАНИЕ: Някои тестове са провалени!")
+            time.sleep(2)
+        except Exception as e:
+            print("Грешка при изпълняване на тестове:", e)
 
     sim.init()
 
@@ -34,6 +49,7 @@ def main():
     using_sim = True 
     last_comm_check = 0
     last_speed_test = 0
+    last_ota_check = 0
     sim_ok = False
     sim_present = False
     sim_rssi = None
@@ -101,6 +117,16 @@ def main():
             new_lat, new_lon = sim.gps_read()
             if new_lat is not None and new_lon is not None:
                 lat, lon = new_lat, new_lon
+        
+        if uptime - last_ota_check >= config.OTA_CHECK_INTERVAL_S:
+            last_ota_check = uptime
+            if (using_wifi and wifi_connected) or (using_sim and sim_available):
+                files_updated, needs_restart = ota_updater.check_and_update()
+                if needs_restart:
+                    print("OTA: Рестартиране за прилагане на обновленията...")
+                    time.sleep(2)
+                    import machine
+                    machine.reset()
         
         if uptime - last_speed_test >= config.SPEED_TEST_INTERVAL_S:
             last_speed_test = uptime
@@ -214,6 +240,13 @@ def main():
             print("ТРАФИК: Изпратено:", sent_str, "| Получено:", recv_str, "| Общо:", traffic_str)
         else:
             print("ТРАФИК: Няма данни")
+        
+        if config.OTA_ENABLED:
+            ota_status = ota_updater.get_status()
+            next_check_str = "{} с".format(ota_status['next_check_in']) if ota_status['next_check_in'] > 0 else "сега"
+            print("OTA: Активен | Следваща проверка след:", next_check_str)
+        else:
+            print("OTA: Деактивиран")
 
         time.sleep(config.MAIN_PERIOD_S)
 
