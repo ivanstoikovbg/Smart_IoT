@@ -14,6 +14,20 @@ from speed_test import SpeedTest
 from ota_updater import OTAUpdater
 
 
+def format_time_ms(milliseconds):
+
+    if milliseconds < 0:
+        milliseconds = 0
+    
+    total_seconds = milliseconds / 1000.0
+    hours = int(total_seconds // 3600)
+    minutes = int((total_seconds % 3600) // 60)
+    secs = int(total_seconds % 60)
+    
+    centiseconds = int((milliseconds % 1000) // 10)
+    return "{:02d}:{:02d}:{:02d}.{:02d}".format(hours, minutes, secs, centiseconds)
+
+
 def main():
     dht22 = DHT22Sensor()
     mq2 = MQ2Sensor()
@@ -26,7 +40,6 @@ def main():
     print("Устройство:", config.DEVICE_NAME)
     print("Стартиране на станцията...")
     
-    # Изпълняване на тестове при стартиране (ако е конфигурирано)
     if config.TEST_ENABLED and config.TEST_RUN_ON_STARTUP:
         print("Изпълняване на тестове...")
         try:
@@ -47,7 +60,7 @@ def main():
     sim_failure_count = 0
     using_wifi = False
     using_sim = True 
-    last_comm_check = 0
+    last_comm_check = -999
     last_speed_test = 0
     last_ota_check = 0
     sim_ok = False
@@ -57,10 +70,20 @@ def main():
     internet_upload_kbps = None
     internet_ping_ms = None
     
-    print("SIM: Използване на SIM като основна комуникация") 
+    print("SIM: Използване на SIM като основна комуникация")
 
+    sim_ok, sim_present, sim_rssi = sim.status()
+    sim_available = sim_ok and sim_present
+    if not sim_available:
+        print("SIM: Проблем детектиран при стартиране, проверяване WiFi...")
+        sim_failure_count = 1 
+
+    start_time_ms = time.ticks_ms()
+    
     while True:
-        uptime = time.ticks_ms() // 1000
+        current_time_ms = time.ticks_ms()
+        uptime_ms = time.ticks_diff(current_time_ms, start_time_ms)
+        uptime = uptime_ms // 1000
 
         t, h = dht22.read()
         mq = mq2.read_avg()
@@ -71,7 +94,12 @@ def main():
         sim_ok, sim_present, sim_rssi = sim.status()
         sim_available = sim_ok and sim_present
         
-        if uptime - last_comm_check >= config.WIFI_CHECK_INTERVAL_S:
+        if sim_failure_count > 0:
+            check_interval = config.SIM_FAST_CHECK_INTERVAL_S
+        else:
+            check_interval = config.WIFI_CHECK_INTERVAL_S
+        
+        if uptime - last_comm_check >= check_interval:
             last_comm_check = uptime
             
             if using_sim and not using_wifi:
@@ -178,8 +206,20 @@ def main():
             print("Грешка при статистика за трафик:", e)
             bytes_sent, bytes_received, total_bytes = 0, 0, 0
 
+        uptime_formatted = format_time_ms(uptime_ms)
+
+        try:
+            t = time.localtime()
+            if t and len(t) >= 6:
+                real_time = "{:02d}:{:02d}:{:02d}.{:02d}".format(t[3], t[4], t[5], 0)
+                time_str = "Време: {} | Работно време: {}".format(real_time, uptime_formatted)
+            else:
+                time_str = "Работно време: {}".format(uptime_formatted)
+        except:
+            time_str = "Работно време: {}".format(uptime_formatted)
+        
         print("=" * 45)
-        print("IoT Станция:", config.DEVICE_NAME, "| Работно време:", uptime, "с")
+        print("IoT Станция:", config.DEVICE_NAME, "|", time_str)
 
         if t is None or h is None:
             print("DHT22: НЯМА ДАННИ")

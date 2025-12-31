@@ -40,14 +40,7 @@ class OTAUpdater:
                 host = url
                 path = "/"
             
-            if ":" in host:
-                host, port = host.split(":")
-                port = int(port)
-            else:
-                if is_https:
-                    port = 443
-                else:
-                    port = 80
+            port = 443 if is_https else 80
             
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             sock.settimeout(timeout_s)
@@ -57,52 +50,86 @@ class OTAUpdater:
             if is_https:
                 try:
                     import ussl
-                    sock = ussl.wrap_socket(sock)
+
+                    protocol = getattr(ussl, 'PROTOCOL_TLS_CLIENT', 0)
+                    ssl_context = ussl.SSLContext(protocol)
+                    
+                    cert_none = 0
+                    try:
+                        cert_none = getattr(ussl, 'CERT_NONE', 0)
+                    except:
+                        pass
+                    
+                    try:
+                        ssl_context.__dict__['verify_mode'] = cert_none
+                    except:
+                        try:
+                            object.__setattr__(ssl_context, 'verify_mode', cert_none)
+                        except:
+                            try:
+                                ssl_context.verify_mode = cert_none
+                            except:
+                                pass
+                                    
+                    try:
+                        sock = ssl_context.wrap_socket(sock, host)
+                    except (TypeError, ValueError) as e:
+                        error_msg = str(e).lower()
+                        if "keyword" in error_msg or "argument" in error_msg:
+                            try:
+                                sock = ssl_context.wrap_socket(sock)
+                            except ValueError as ve:
+                                if "server_hostname" in str(ve):
+                                    try:
+                                        ssl_context.__dict__['verify_mode'] = cert_none
+                                    except:
+                                        try:
+                                            object.__setattr__(ssl_context, 'verify_mode', cert_none)
+                                        except:
+                                            try:
+                                                ssl_context.verify_mode = cert_none
+                                            except:
+                                                pass
+                                    sock = ssl_context.wrap_socket(sock)
+                                else:
+                                    raise
+                        else:
+                            raise
                 except ImportError:
                     print("OTA: SSL не е поддържан, използване на HTTP")
+                    return None
+                except Exception as e:
+                    print("OTA: SSL грешка:", e)
+                    sock.close()
                     return None
             
             request = "GET {} HTTP/1.1\r\nHost: {}\r\nConnection: close\r\n\r\n".format(path, host)
             sock.send(request.encode())
-            
-            response = b""
-            headers_done = False
+
+            all_data = b""
             
             while True:
                 try:
-                    chunk = sock.recv(1024)
+                    chunk = sock.recv(4096)
                     if not chunk:
                         break
-                    
-                    if not headers_done:
-                        response += chunk
-                        if b"\r\n\r\n" in response:
-                            header_end = response.find(b"\r\n\r\n")
-                            headers = response[:header_end].decode('utf-8', 'ignore')
-                            body = response[header_end + 4:]
-                            
-                            if "200 OK" in headers:
-                                response = body
-                                headers_done = True
-                            else:
-                                sock.close()
-                                return None
-                        else:
-                            continue
-                    else:
-                        response += chunk
-                        
-                except socket.timeout:
+                    all_data += chunk
+                except OSError:
                     break
                 except Exception:
                     break
             
             sock.close()
             
-            if headers_done:
-                return response
-            else:
+            if b"\r\n\r\n" not in all_data:
                 return None
+            
+            header_data, body_data = all_data.split(b"\r\n\r\n", 1)
+            
+            if b"200 OK" not in header_data:
+                return None
+            
+            return body_data
                 
         except Exception as e:
             print("OTA: Грешка при изтегляне:", e)
@@ -183,15 +210,23 @@ class OTAUpdater:
     
     def get_status(self):
         current_time = time.ticks_ms() // 1000
-        elapsed = current_time - self._last_check
-        next_check = config.OTA_CHECK_INTERVAL_S - elapsed
         
-        if next_check < 0:
-            next_check = 0
+        if self._last_check == 0:
+            self._last_check = current_time
+            next_check = config.OTA_CHECK_INTERVAL_S
+        else:
+            elapsed = time.ticks_diff(current_time, self._last_check)
+            
+            if elapsed < 0:
+                self._last_check = current_time
+                next_check = config.OTA_CHECK_INTERVAL_S
+            else:
+                next_check = config.OTA_CHECK_INTERVAL_S - elapsed
+                if next_check < 0:
+                    next_check = 0
         
         return {
             'enabled': config.OTA_ENABLED,
             'last_check': self._last_check,
             'next_check_in': next_check
         }
-
