@@ -34,3 +34,24 @@ SPEED_TEST_INTERVAL_S = 20
 SPEED_TEST_URL = "http://www.google.com"  
 SPEED_TEST_TIMEOUT_S = 10  
 
+
+# OTA Updates
+OTA_ENABLED = True
+OTA_CHECK_INTERVAL_S = 300
+OTA_GITHUB_REPO = "ivanstoikovbg/Smart_IoT"
+OTA_GITHUB_BRANCH = "main"
+OTA_BASE_URL = "https://raw.githubusercontent.com/{}/{}".format(OTA_GITHUB_REPO, OTA_GITHUB_BRANCH)
+OTA_FILES_TO_UPDATE = [
+    "main.py",
+    "src/dht22.py",
+    "src/mq2.py",
+    "src/sds011.py",
+    "src/sim7600.py",
+    "src/wifi_manager.py",
+    "src/speed_test.py",
+    "src/ota_updater.py"
+]
+
+# Тестове
+TEST_ENABLED = True
+TEST_RUN_ON_STARTUP = True
