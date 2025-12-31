@@ -243,7 +243,8 @@ def main():
         
         if config.OTA_ENABLED:
             ota_status = ota_updater.get_status()
-            next_check_str = "{} с".format(ota_status['next_check_in']) if ota_status['next_check_in'] > 0 else "сега"
+            next_check = ota_status['next_check_in']
+            next_check_str = "{} с".format(next_check)
             print("OTA: Активен | Следваща проверка след:", next_check_str)
         else:
             print("OTA: Деактивиран")

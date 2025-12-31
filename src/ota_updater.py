@@ -183,7 +183,9 @@ class OTAUpdater:
     
     def get_status(self):
         current_time = time.ticks_ms() // 1000
-        next_check = config.OTA_CHECK_INTERVAL_S - (current_time - self._last_check)
+        elapsed = current_time - self._last_check
+        next_check = config.OTA_CHECK_INTERVAL_S - elapsed
+        
         if next_check < 0:
             next_check = 0
         
