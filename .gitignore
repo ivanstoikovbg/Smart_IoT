@@ -21,7 +21,7 @@ __pycache__/
 Thumbs.db
 
 # Project specific
-
+src/config.py
 
 # Build files
 build/
