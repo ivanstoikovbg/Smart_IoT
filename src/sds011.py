@@ -23,3 +23,6 @@ class SDS011Sensor:
                 return pm25, pm10
 
         return None, None
+    
+
+    print("SDS011Sensor: test")
