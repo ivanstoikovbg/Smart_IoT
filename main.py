@@ -96,7 +96,7 @@ def main():
         uptime_ms = time.ticks_diff(current_time_ms, start_time_ms)
         uptime = uptime_ms // 1000
 
-        t, h = dht22.read()
+        temp, humidity = dht22.read()
         mq = mq2.read_avg()
         pm25, pm10 = sds.read_once()
 
@@ -174,6 +174,7 @@ def main():
                 has_internet = (using_wifi and wifi_connected) or (using_sim and sim_available)
                 
                 if has_internet:
+                    print("MQTT: Започване на публикуване на данни...")
                     try:
                         current_time = time.localtime()
                         time_str = None
@@ -200,8 +201,8 @@ def main():
                             },
                             "sensors": {
                                 "dht22": {
-                                    "temperature": t if t is not None else None,
-                                    "humidity": h if h is not None else None
+                                    "temperature": temp if temp is not None else None,
+                                    "humidity": humidity if humidity is not None else None
                                 },
                                 "mq2": {
                                     "raw_value": mq if mq is not None else None
@@ -219,6 +220,8 @@ def main():
                         }
                         
                         topic_prefix = getattr(config, 'MQTT_TOPIC_PREFIX', 'iot/sensors')
+                        topic = "{}/{}".format(topic_prefix, config.DEVICE_NAME)
+                        print("MQTT: Публикуване на данни в topic:", topic)
                         success = mqtt_client.publish_sensor_data(
                             topic_prefix,
                             config.DEVICE_NAME,
@@ -226,12 +229,14 @@ def main():
                         )
                         
                         if success:
-                            print("MQTT: Данните са публикувани успешно")
+                            print("MQTT: ✓ Данните са публикувани успешно в", topic)
                         else:
-                            print("MQTT: Грешка при публикуване на данни")
+                            print("MQTT: ✗ Грешка при публикуване на данни в", topic)
                             
                     except Exception as e:
-                        print("MQTT: Грешка при подготовка/публикуване на данни:", e)
+                        print("MQTT: ✗ Грешка при подготовка/публикуване на данни:", e)
+                        import sys
+                        sys.print_exception(e)
                 else:
                     print("MQTT: Няма интернет връзка, пропускане на публикуване")
         
@@ -300,10 +305,10 @@ def main():
         print("=" * 45)
         print("IoT Станция:", config.DEVICE_NAME, "|", time_str)
 
-        if t is None or h is None:
+        if temp is None or humidity is None:
             print("DHT22: НЯМА ДАННИ")
         else:
-            print("DHT22:", t, "°C |", h, "%")
+            print("DHT22:", temp, "°C |", humidity, "%")
 
         print("MQ-2: сурово =", mq)
 
@@ -373,9 +378,11 @@ def main():
                 next_mqtt = config.MQTT_PUBLISH_INTERVAL_S - (uptime - last_mqtt_publish)
                 if next_mqtt < 0:
                     next_mqtt = 0
-                print("MQTT: Свързан | Следващо публикуване след: {} с".format(next_mqtt))
+                broker_info = "{}:{}".format(config.MQTT_BROKER_HOST, config.MQTT_BROKER_PORT)
+                print("MQTT: ✓ Свързан към {} | Следващо публикуване след: {} с".format(broker_info, next_mqtt))
             else:
-                print("MQTT: Не е свързан")
+                broker_info = "{}:{}".format(config.MQTT_BROKER_HOST, config.MQTT_BROKER_PORT)
+                print("MQTT: ✗ Не е свързан към {}".format(broker_info))
 
         time.sleep(config.MAIN_PERIOD_S)
 
