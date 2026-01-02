@@ -14,14 +14,24 @@ from speed_test import SpeedTest
 from ota_updater import OTAUpdater
 
 mqtt_client = None
-if hasattr(config, 'MQTT_ENABLED') and config.MQTT_ENABLED:
-    try:
-        from mqtt_client import MQTTClient
-        mqtt_client = MQTTClient()
-        print("MQTT: Клиентът е инициализиран")
-    except Exception as e:
-        print("MQTT: Грешка при инициализация:", e)
-        mqtt_client = None
+if hasattr(config, 'MQTT_ENABLED'):
+    if config.MQTT_ENABLED:
+        try:
+            from mqtt_client import MQTTClient
+            mqtt_client = MQTTClient()
+            print("MQTT: Клиентът е инициализиран")
+        except ImportError as e:
+            print("MQTT: Грешка при импортиране на модул:", e)
+            mqtt_client = None
+        except Exception as e:
+            print("MQTT: Грешка при инициализация:", e)
+            import sys
+            sys.print_exception(e)
+            mqtt_client = None
+    else:
+        print("MQTT: Деактивиран в config.py")
+else:
+    print("MQTT: MQTT_ENABLED не е дефиниран в config.py")
 
 
 def format_time_ms(milliseconds):
@@ -49,6 +59,17 @@ def main():
 
     print("Устройство:", config.DEVICE_NAME)
     print("Стартиране на станцията...")
+    
+    # Проверка на MQTT конфигурация
+    if hasattr(config, 'MQTT_ENABLED'):
+        print("MQTT: Конфигурация - ENABLED =", config.MQTT_ENABLED)
+        if config.MQTT_ENABLED:
+            if hasattr(config, 'MQTT_BROKER_HOST'):
+                print("MQTT: Broker =", config.MQTT_BROKER_HOST, ":", getattr(config, 'MQTT_BROKER_PORT', 1883))
+            else:
+                print("MQTT: ВНИМАНИЕ - MQTT_BROKER_HOST не е дефиниран!")
+    else:
+        print("MQTT: ВНИМАНИЕ - MQTT_ENABLED не е дефиниран в config.py!")
     
     if config.TEST_ENABLED and config.TEST_RUN_ON_STARTUP:
         print("Изпълняване на тестове...")
