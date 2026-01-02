@@ -13,6 +13,16 @@ from wifi_manager import WiFiManager
 from speed_test import SpeedTest
 from ota_updater import OTAUpdater
 
+mqtt_client = None
+if hasattr(config, 'MQTT_ENABLED') and config.MQTT_ENABLED:
+    try:
+        from mqtt_client import MQTTClient
+        mqtt_client = MQTTClient()
+        print("MQTT: Клиентът е инициализиран")
+    except Exception as e:
+        print("MQTT: Грешка при инициализация:", e)
+        mqtt_client = None
+
 
 def format_time_ms(milliseconds):
 
@@ -63,6 +73,7 @@ def main():
     last_comm_check = -999
     last_speed_test = 0
     last_ota_check = 0
+    last_mqtt_publish = 0
     sim_ok = False
     sim_present = False
     sim_rssi = None
@@ -156,6 +167,74 @@ def main():
                     import machine
                     machine.reset()
         
+        if mqtt_client and hasattr(config, 'MQTT_PUBLISH_INTERVAL_S'):
+            if uptime - last_mqtt_publish >= config.MQTT_PUBLISH_INTERVAL_S:
+                last_mqtt_publish = uptime
+
+                has_internet = (using_wifi and wifi_connected) or (using_sim and sim_available)
+                
+                if has_internet:
+                    try:
+                        current_time = time.localtime()
+                        time_str = None
+                        date_str = None
+                        
+                        if current_time and len(current_time) >= 6:
+                            time_str = "{:02d}:{:02d}:{:02d}".format(
+                                current_time[3],  # час
+                                current_time[4],  # минута
+                                current_time[5]  # секунда
+                            )   
+                            date_str = "{:02d}/{:02d}/{:04d}".format(
+                                current_time[2],  # ден
+                                current_time[1],  # месец
+                                current_time[0]   # година
+                            )
+                        
+                        sensor_data = {
+                            "device_id": config.DEVICE_NAME,
+                            "timestamp": {
+                                "time": time_str,
+                                "date": date_str,
+                                "unix": time.time() if hasattr(time, 'time') else None
+                            },
+                            "sensors": {
+                                "dht22": {
+                                    "temperature": t if t is not None else None,
+                                    "humidity": h if h is not None else None
+                                },
+                                "mq2": {
+                                    "raw_value": mq if mq is not None else None
+                                },
+                                "sds011": {
+                                    "pm25": pm25 if pm25 is not None else None,
+                                    "pm10": pm10 if pm10 is not None else None
+                                }
+                            },
+                            "communication": {
+                                "type": "sim" if using_sim else "wifi",
+                                "sim_available": sim_available,
+                                "wifi_connected": wifi_connected
+                            }
+                        }
+                        
+                        topic_prefix = getattr(config, 'MQTT_TOPIC_PREFIX', 'iot/sensors')
+                        success = mqtt_client.publish_sensor_data(
+                            topic_prefix,
+                            config.DEVICE_NAME,
+                            sensor_data
+                        )
+                        
+                        if success:
+                            print("MQTT: Данните са публикувани успешно")
+                        else:
+                            print("MQTT: Грешка при публикуване на данни")
+                            
+                    except Exception as e:
+                        print("MQTT: Грешка при подготовка/публикуване на данни:", e)
+                else:
+                    print("MQTT: Няма интернет връзка, пропускане на публикуване")
+        
         if uptime - last_speed_test >= config.SPEED_TEST_INTERVAL_S:
             last_speed_test = uptime
             if using_wifi and wifi_connected:
@@ -209,9 +288,9 @@ def main():
         uptime_formatted = format_time_ms(uptime_ms)
 
         try:
-            t = time.localtime()
-            if t and len(t) >= 6:
-                real_time = "{:02d}:{:02d}:{:02d}.{:02d}".format(t[3], t[4], t[5], 0)
+            time_info = time.localtime()
+            if time_info and len(time_info) >= 6:
+                real_time = "{:02d}:{:02d}:{:02d}.{:02d}".format(time_info[3], time_info[4], time_info[5], 0)
                 time_str = "Време: {} | Работно време: {}".format(real_time, uptime_formatted)
             else:
                 time_str = "Работно време: {}".format(uptime_formatted)
@@ -288,6 +367,15 @@ def main():
             print("OTA: Активен | Следваща проверка след:", next_check_str)
         else:
             print("OTA: Деактивиран")
+        
+        if mqtt_client and hasattr(config, 'MQTT_ENABLED') and config.MQTT_ENABLED:
+            if mqtt_client.is_connected():
+                next_mqtt = config.MQTT_PUBLISH_INTERVAL_S - (uptime - last_mqtt_publish)
+                if next_mqtt < 0:
+                    next_mqtt = 0
+                print("MQTT: Свързан | Следващо публикуване след: {} с".format(next_mqtt))
+            else:
+                print("MQTT: Не е свързан")
 
         time.sleep(config.MAIN_PERIOD_S)
 

@@ -24,7 +24,7 @@ GPS_READ_EVERY_S = 5
 
 # WiFi
 WIFI_SSID = "your_wifi_ssid"
-WIFI_PASSWORD = "your_wifi_password"
+WIFI_PASSWORD = "your_wifi_password" 
 WIFI_CONNECT_TIMEOUT_S = 10
 WIFI_CHECK_INTERVAL_S = 30  
 SIM_FAILURE_THRESHOLD = 3
@@ -49,9 +49,21 @@ OTA_FILES_TO_UPDATE = [
     "src/sim7600.py",
     "src/wifi_manager.py",
     "src/speed_test.py",
-    "src/ota_updater.py"
+    "src/ota_updater.py",
+    "src/mqtt_client.py"
 ]
 
 # Тестове
 TEST_ENABLED = True
 TEST_RUN_ON_STARTUP = True
+
+# MQTT
+MQTT_ENABLED = True
+MQTT_BROKER_HOST = "mqtt.cityreport.eu"
+MQTT_BROKER_PORT = 1883
+MQTT_USE_SSL = False
+MQTT_USER = "your_mqtt_username"
+MQTT_PASSWORD = "your_mqtt_password"
+MQTT_TOPIC_PREFIX = "iot/sensors"
+MQTT_KEEPALIVE = 60
+MQTT_PUBLISH_INTERVAL_S = 300 
